@@ -8,7 +8,7 @@ const app = express();
 const API_KEY = process.env.LASTFM_API_KEY;
 const SECRET = process.env.LASTFM_SECRET;
 
-// Correct callback URL — must match Last.fm app settings
+// MUST match your Last.fm app settings EXACTLY
 const CALLBACK = "https://cupid-lastfm-auth-1.onrender.com/lastfm/callback";
 
 // Render requires dynamic port binding
@@ -31,7 +31,7 @@ app.get("/lastfm/login", (req, res) => {
 app.get("/lastfm/callback", async (req, res) => {
     const token = req.query.token;
 
-    // Accept BOTH ?id= and ?i= because Last.fm sometimes uses "i"
+    // Accept BOTH ?id= and ?i=
     const discordId = req.query.id || req.query.i;
 
     if (!token || !discordId)
@@ -49,7 +49,10 @@ app.get("/lastfm/callback", async (req, res) => {
         );
 
         if (!data.session)
-            return res.send("Failed to authenticate with Last.fm.");
+            return res.send(`
+                <h2>Failed to authenticate with Last.fm.</h2>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `);
 
         const username = data.session.name;
         const sessionKey = data.session.key;
@@ -68,8 +71,12 @@ app.get("/lastfm/callback", async (req, res) => {
         `);
 
     } catch (err) {
-        console.error(err);
-        res.send("Error completing authentication.");
+        console.error("LASTFM ERROR:", err.response?.data || err.message || err);
+
+        res.send(`
+            <h2>Error completing authentication.</h2>
+            <pre>${JSON.stringify(err.response?.data || err.message || err, null, 2)}</pre>
+        `);
     }
 });
 
