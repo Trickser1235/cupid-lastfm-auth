@@ -2,6 +2,17 @@ const express = require("express");
 const axios = require("axios");
 const LastfmUser = require("./LastfmUser");
 const crypto = require("crypto");
+const mongoose = require("mongoose");
+
+// ===============================
+// CONNECT TO MONGODB (REQUIRED)
+// ===============================
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+})
+.then(() => console.log("MongoDB connected"))
+.catch(err => console.error("MongoDB connection error:", err));
 
 const app = express();
 
@@ -18,7 +29,9 @@ app.listen(PORT, () => {
     console.log(`Last.fm OAuth server running on port ${PORT}`);
 });
 
+// ===============================
 // STEP 1 — Redirect user to Last.fm login
+// ===============================
 app.get("/lastfm/login", (req, res) => {
     const discordId = req.query.id;
     if (!discordId) return res.send("Missing Discord ID.");
@@ -27,7 +40,9 @@ app.get("/lastfm/login", (req, res) => {
     res.redirect(url);
 });
 
+// ===============================
 // STEP 2 — Callback from Last.fm
+// ===============================
 app.get("/lastfm/callback", async (req, res) => {
     const token = req.query.token;
 
