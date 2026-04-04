@@ -66,5 +66,5 @@ app.get("/lastfm/callback", async (req, res) => {
     }
 });
 
-module.exports = app;----------------------
+module.exports = app;
 app.listen(3000, () => console.log("OAuth server running on port 3000"));
