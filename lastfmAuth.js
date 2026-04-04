@@ -8,11 +8,14 @@ const app = express();
 const API_KEY = process.env.LASTFM_API_KEY;
 const SECRET = process.env.LASTFM_SECRET;
 
-// Correct callback URL
+// Correct callback URL — must match Last.fm app settings
 const CALLBACK = "https://cupid-lastfm-auth-1.onrender.com/lastfm/callback";
 
-app.listen(3000, () => {
-    console.log("Last.fm OAuth server running on port 3000");
+// Render requires dynamic port binding
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log(`Last.fm OAuth server running on port ${PORT}`);
 });
 
 // STEP 1 — Redirect user to Last.fm login
@@ -24,21 +27,23 @@ app.get("/lastfm/login", (req, res) => {
     res.redirect(url);
 });
 
-// STEP 2 — Callback
+// STEP 2 — Callback from Last.fm
 app.get("/lastfm/callback", async (req, res) => {
     const token = req.query.token;
 
-    // Accept BOTH ?id= and ?i=
+    // Accept BOTH ?id= and ?i= because Last.fm sometimes uses "i"
     const discordId = req.query.id || req.query.i;
 
     if (!token || !discordId)
         return res.send("Missing token or Discord ID.");
 
     try {
+        // Generate API signature
         const sig = crypto.createHash("md5")
             .update(`api_key${API_KEY}methodauth.getSessiontoken${token}${SECRET}`)
             .digest("hex");
 
+        // Exchange token for session key
         const { data } = await axios.get(
             `http://ws.audioscrobbler.com/2.0/?method=auth.getSession&api_key=${API_KEY}&token=${token}&api_sig=${sig}&format=json`
         );
@@ -49,12 +54,14 @@ app.get("/lastfm/callback", async (req, res) => {
         const username = data.session.name;
         const sessionKey = data.session.key;
 
+        // Save to MongoDB
         await LastfmUser.findOneAndUpdate(
             { discordId },
             { username, sessionKey },
             { upsert: true }
         );
 
+        // Success page
         res.send(`
             <h2>Last.fm account linked!</h2>
             <p>You can now return to Discord.</p>
@@ -67,4 +74,3 @@ app.get("/lastfm/callback", async (req, res) => {
 });
 
 module.exports = app;
-app.listen(3000, () => console.log("OAuth server running on port 3000"));
