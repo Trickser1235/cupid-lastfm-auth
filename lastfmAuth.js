@@ -1,61 +1,50 @@
 const express = require("express");
 const axios = require("axios");
-const mongoose = require("mongoose");
-const cors = require("cors");
-require("dotenv").config();
-
 const LastfmUser = require("./LastfmUser");
+const crypto = require("crypto");
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-// -------------------------------
-// CONFIG
-// -------------------------------
 const API_KEY = process.env.LASTFM_API_KEY;
-const API_SECRET = process.env.LASTFM_SECRET;
-const MONGO = process.env.MONGO_URI;
-const BOT_REDIRECT = process.env.BOT_REDIRECT; 
-// Example: https://discord.com/channels/@me
+const SECRET = process.env.LASTFM_SECRET;
 
-mongoose.connect(MONGO)
-    .then(() => console.log("OAuth MongoDB Connected"))
-    .catch(err => console.log("OAuth MongoDB Error:", err));
+// Correct callback URL
+const CALLBACK = "https://cupid-lastfm-auth-1.onrender.com/lastfm/callback";
 
-// -------------------------------
-// LOGIN ROUTE
-// -------------------------------
+app.listen(3000, () => {
+    console.log("Last.fm OAuth server running on port 3000");
+});
+
+// STEP 1 — Redirect user to Last.fm login
 app.get("/lastfm/login", (req, res) => {
     const discordId = req.query.id;
     if (!discordId) return res.send("Missing Discord ID.");
 
-    const callback = `${process.env.OAUTH_DOMAIN}/lastfm/callback?i=${discordId}`;
-
-    const url =
-        `https://www.last.fm/api/auth?api_key=${API_KEY}&cb=${encodeURIComponent(callback)}`;
-
-    return res.redirect(url);
+    const url = `http://www.last.fm/api/auth/?api_key=${API_KEY}&cb=${encodeURIComponent(CALLBACK + "?id=" + discordId)}`;
+    res.redirect(url);
 });
 
-// -------------------------------
-// CALLBACK ROUTE
-// -------------------------------
+// STEP 2 — Callback
 app.get("/lastfm/callback", async (req, res) => {
     const token = req.query.token;
-    const discordId = req.query.i;
+
+    // Accept BOTH ?id= and ?i=
+    const discordId = req.query.id || req.query.i;
 
     if (!token || !discordId)
         return res.send("Missing token or Discord ID.");
 
     try {
-        const sessionURL =
-            `https://ws.audioscrobbler.com/2.0/?method=auth.getSession&api_key=${API_KEY}&token=${token}&api_sig=${API_SECRET}&format=json`;
+        const sig = crypto.createHash("md5")
+            .update(`api_key${API_KEY}methodauth.getSessiontoken${token}${SECRET}`)
+            .digest("hex");
 
-        const { data } = await axios.get(sessionURL);
+        const { data } = await axios.get(
+            `http://ws.audioscrobbler.com/2.0/?method=auth.getSession&api_key=${API_KEY}&token=${token}&api_sig=${sig}&format=json`
+        );
 
         if (!data.session)
-            return res.send("Failed to get session.");
+            return res.send("Failed to authenticate with Last.fm.");
 
         const username = data.session.name;
         const sessionKey = data.session.key;
@@ -66,16 +55,16 @@ app.get("/lastfm/callback", async (req, res) => {
             { upsert: true }
         );
 
-        return res.send(`
+        res.send(`
             <h2>Last.fm account linked!</h2>
-            <p>You can close this page and return to Discord.</p>
+            <p>You can now return to Discord.</p>
         `);
 
     } catch (err) {
-        console.log(err);
-        return res.send("Error linking account.");
+        console.error(err);
+        res.send("Error completing authentication.");
     }
 });
 
-// -------------------------------
+module.exports = app;----------------------
 app.listen(3000, () => console.log("OAuth server running on port 3000"));
